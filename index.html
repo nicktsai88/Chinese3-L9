@@ -249,7 +249,7 @@
             padding: 12px; border: 2px solid #eee; background: #fff; border-radius: 8px;
             text-align: left; cursor: pointer; font-size: 1.3em; transition: 0.2s;
         }
-        .wf-opt-btn:hover:not(:disabled) { border-color: var(--quick-mode-color); background: var(--quick-mode-bg); }
+        .wf-opt-btn.hover:not(:disabled) { border-color: var(--quick-mode-color); background: var(--quick-mode-bg); }
         .wf-opt-btn.correct { background: #d4edda; border-color: var(--correct-color); color: #155724; font-weight: bold;}
         .wf-opt-btn.wrong { background: #f8d7da; border-color: var(--wrong-color); color: #721c24; }
         
@@ -518,7 +518,10 @@
     <div id="ai-chat-window">
         <div class="ai-header">
             <span>🤖 AI 書僮</span>
-            <span class="ai-header-close" onclick="toggleChatWindow()">×</span>
+            <div style="display:flex; gap:10px;">
+                <span class="ai-header-close" onclick="resetAiKey()" title="重設 API Key" style="font-size: 0.9em;">🔑</span>
+                <span class="ai-header-close" onclick="toggleChatWindow()">×</span>
+            </div>
         </div>
         <div id="ai-messages" class="ai-messages">
             <div class="ai-msg bot">你好！我是你的 AI 書僮，有什麼問題都可以問我喔！</div>
@@ -532,7 +535,7 @@
     <script src="https://www.youtube.com/iframe_api"></script>
     <script>
         // AI Configuration
-        const GEMINI_API_KEY = "AIzaSyClvpaO8DMz3Vjnbj_BUqQgYv9E_1ozZ_c"; // 請在此填入您的 API Key
+        // 修改點：移除硬編碼的 API Key，改用 LocalStorage
         const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=";
 
         // 設定與全域變數
@@ -1213,6 +1216,14 @@
             if (e.key === 'Enter') sendAiMessage();
         }
 
+        // 修改點：手動重設 Key 的功能
+        function resetAiKey() {
+            if(confirm("確定要清除目前儲存的 API Key 嗎？下次使用 AI 功能時將需要重新輸入。")) {
+                localStorage.removeItem(APP_PREFIX + 'gemini_api_key');
+                alert("API Key 已清除！");
+            }
+        }
+
         async function sendAiMessage() {
             const input = document.getElementById('ai-input');
             const msgArea = document.getElementById('ai-messages');
@@ -1220,9 +1231,18 @@
             
             if (!userText) return;
 
-            if (!GEMINI_API_KEY) {
-                alert("請先在程式碼中設定 GEMINI_API_KEY 變數！");
-                return;
+            // 修改點：從 LocalStorage 取得 Key
+            let apiKey = localStorage.getItem(APP_PREFIX + 'gemini_api_key');
+
+            // 修改點：如果沒有 Key，跳出輸入框
+            if (!apiKey) {
+                const inputKey = prompt("請輸入您的 Google Gemini API Key：\n(金鑰將儲存在您的瀏覽器本地端，不會上傳伺服器，請安心使用)");
+                if (!inputKey || inputKey.trim() === "") {
+                    alert("需要 API Key 才能使用 AI 書僮功能喔！");
+                    return;
+                }
+                apiKey = inputKey.trim();
+                localStorage.setItem(APP_PREFIX + 'gemini_api_key', apiKey);
             }
 
             // Display user message
@@ -1243,7 +1263,8 @@
             msgArea.scrollTop = msgArea.scrollHeight;
 
             try {
-                const response = await fetch(GEMINI_API_URL + GEMINI_API_KEY, {
+                // 修改點：使用動態取得的 apiKey
+                const response = await fetch(GEMINI_API_URL + apiKey, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1277,11 +1298,18 @@
                 const loader = document.getElementById('ai-loading');
                 if (loader) loader.remove();
                 
+                // 修改點：如果發生錯誤，提示是否重設 Key
                 const errorMsg = document.createElement('div');
                 errorMsg.className = 'ai-msg bot';
                 errorMsg.style.color = 'red';
                 errorMsg.innerText = `連線錯誤: ${error.message}`;
                 msgArea.appendChild(errorMsg);
+
+                if (error.message.includes('400') || error.message.includes('403') || error.message.includes('key')) {
+                    if(confirm("連線失敗，可能是 API Key 無效或過期。是否要清除舊的 Key 並重新輸入？")) {
+                        localStorage.removeItem(APP_PREFIX + 'gemini_api_key');
+                    }
+                }
             }
             
             msgArea.scrollTop = msgArea.scrollHeight;
